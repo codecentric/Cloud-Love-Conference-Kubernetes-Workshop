@@ -1,0 +1,8 @@
+terraform/env.sh
+**/*.hcl
+**/*.info
+**/*.pem
+**/*.tfstate
+**/*.backup
+**/.terraform
+.idea
