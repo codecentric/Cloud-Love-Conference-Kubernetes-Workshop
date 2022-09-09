@@ -1,0 +1,12 @@
+- userarn: arn:aws:iam::952638024843:user/christian.barthel
+  username: christian.barthel
+  groups:
+    - system:masters
+- userarn: arn:aws:iam::677670390262:user/manuel.menz
+  username: manuel.menz
+  groups:
+    - system:masters
+- userarn: arn:aws:iam::755135527660:user/pascal.sochacki
+  username: pascal.sochacki
+  groups:
+    - system:masters
