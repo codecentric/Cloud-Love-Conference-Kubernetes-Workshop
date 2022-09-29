@@ -1,6 +1,6 @@
 resource "aws_instance" "ssh" {
   ami = "ami-065deacbcaac64cf2"
-  instance_type = "t2.nano"
+  instance_type = "t3.large"
   key_name = aws_key_pair.kp.key_name
   security_groups = [aws_security_group.ingress-all-test.id]
   subnet_id = aws_subnet.subnet-uno.id

@@ -1,12 +1,11 @@
+locals {
+  name = "ex-${replace(basename(path.cwd), "_", "-")}"
+}
+
 data "aws_eks_cluster_auth" "cluster" {
   name = module.eks.cluster_id
 }
 
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
-}
 
 data "aws_availability_zones" "available" {}
 
@@ -21,38 +20,28 @@ resource "random_string" "suffix" {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "18.28.0"
+  version = "18.29.1"
 
   cluster_name    = local.cluster_name
-  cluster_version = "1.22"
+  cluster_version = "1.23"
 
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
-
-  eks_managed_node_group_defaults = {
-    ami_type = "AL2_x86_64"
-
-    attach_cluster_primary_security_group = true
-
-    # Disabling and using externally provided security groups
-    create_security_group = false
-  }
+  vpc_id                          = module.vpc.vpc_id
+  subnet_ids                      = module.vpc.private_subnets
+  cluster_endpoint_private_access = true
+  cluster_endpoint_public_access  = true
+  enable_irsa = true
 
   eks_managed_node_groups = {
     one = {
       name = "node-group-1"
 
-      instance_types = ["t3.small"]
+      instance_types = ["t3.large"]
 
       min_size     = 1
       max_size     = 3
       desired_size = 2
 
-      vpc_security_group_ids = [
-        aws_security_group.node_group_one.id
-      ]
     }
-
   }
 }
 
@@ -60,7 +49,6 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "3.14.2"
 
-  name = "education-vpc"
 
   cidr = "10.0.0.0/16"
   azs  = slice(data.aws_availability_zones.available.names, 0, 3)
@@ -80,128 +68,5 @@ module "vpc" {
   private_subnet_tags = {
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
     "kubernetes.io/role/internal-elb"             = 1
-  }
-}
-
-resource "aws_security_group" "node_group_one" {
-  name_prefix = "node_group_one"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port = 22
-    to_port   = 22
-    protocol  = "tcp"
-
-    cidr_blocks = [
-      "10.0.0.0/8",
-    ]
-  }
-}
-
-resource "aws_security_group" "node_group_two" {
-  name_prefix = "node_group_two"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port = 22
-    to_port   = 22
-    protocol  = "tcp"
-
-    cidr_blocks = [
-      "192.168.0.0/16",
-    ]
-  }
-}
-
-resource "kubernetes_namespace" "user-namespaces" {
-  for_each = var.users
-  metadata {
-    name = each.key
-  }
-}
-
-resource "kubernetes_role" "user-role" {
-  for_each   = var.users
-  depends_on = [kubernetes_namespace.user-namespaces]
-  metadata {
-    namespace = each.key
-    name      = each.key
-  }
-  rule {
-    api_groups = [
-      ""
-    ]
-    verbs = [
-      "get",
-      "watch",
-      "list",
-      "create",
-      "delete",
-      "deletecollection",
-      "patch",
-      "update"
-    ]
-    resources = [
-      "pods",
-      "daemonsets",
-      "deployments",
-      "replicasets",
-      "statefulsets",
-      "ingresses",
-      "services",
-      "configmaps",
-      "secrets",
-      "persistentvolumeclaims"
-    ]
-  }
-}
-
-resource "kubernetes_service_account" "user-account" {
-  for_each   = var.users
-  depends_on = [kubernetes_namespace.user-namespaces]
-  metadata {
-    namespace = each.value
-    name      = each.value
-  }
-}
-
-resource "kubernetes_role_binding" "user-role-binding" {
-  for_each   = var.users
-  depends_on = [kubernetes_service_account.user-account, kubernetes_role.user-role]
-  metadata {
-    namespace = each.value
-    name      = each.value
-  }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "Role"
-    name      = each.value
-  }
-  subject {
-    kind      = "ServiceAccount"
-    name      = each.value
-    namespace = each.value
-  }
-}
-
-resource "kubernetes_config_map" "aws-auth" {
-  metadata {
-    namespace = "kube-system"
-    name      = "aws-auth"
-  }
-
-  data = {
-    mapUsers = file("${path.module}/mapUsers.yaml")
-  }
-
-
-}
-
-
-data "kubernetes_secret" "user-secret" {
-  for_each = kubernetes_service_account.user-account
-  metadata {
-    namespace = each.value.metadata.0.namespace
-    name      = each.value.default_secret_name
   }
 }
